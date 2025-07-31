@@ -1,0 +1,29 @@
+
+import org.osgi.service.metatype.annotations.AttributeDefinition;
+import org.osgi.service.metatype.annotations.ObjectClassDefinition;
+
+@ObjectClassDefinition(
+    name = "Custom Configuration",
+    description = "Sample configuration with checkbox, multifield, and text field"
+)
+public @interface CustomConfig {
+
+    @AttributeDefinition(
+        name = "Enable Feature",
+        description = "Check to enable the feature"
+    )
+    boolean enableFeature() default false;
+
+    @AttributeDefinition(
+        name = "Path List",
+        description = "List of paths",
+        cardinality = Integer.MIN_VALUE // Use this for multifield (array)
+    )
+    String[] pathList() default {};
+
+    @AttributeDefinition(
+        name = "Custom Text",
+        description = "Some custom text input"
+    )
+    String customText() default "default text";
+}
