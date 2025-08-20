@@ -1,131 +1,133 @@
-(function (document) {
-  const FORM_SEL = 'form.foundation-form[action*="managepublication"]';
+$(function () {
+  console.log("TZ extension (no servlet) loaded ✅");
 
-  // Wait for the Manage Publication wizard to appear
-  function onWizardReady(cb) {
-    const f = document.querySelector(FORM_SEL);
-    if (f) return cb(f);
-    const mo = new MutationObserver(() => {
-      const f2 = document.querySelector(FORM_SEL);
-      if (f2) { mo.disconnect(); cb(f2); }
-    });
-    mo.observe(document.documentElement, { childList: true, subtree: true });
+  /** ======================
+   *  CONFIG (edit here)
+   *  ====================== */
+  // Option A: Hardcode your author server timezone (recommended for accuracy).
+  // Examples: "America/Toronto", "UTC", "Europe/London"
+  const SERVER_TZ = "America/Toronto";
+
+  // Option B: If you can't hardcode, set to true to use the browser's timezone as a fallback.
+  const USE_BROWSER_TZ_IF_UNSET = true;
+
+  // Optional: Choose the default timezone shown to authors (browser TZ is nice).
+  const DEFAULT_TZ = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+
+  /** ======================
+   *  Helpers
+   *  ====================== */
+  function findWizardForm() {
+    return $('form.foundation-form').filter(function () {
+      return $(this).find('coral-radio[name="when"], input[name="when"]').length > 0;
+    }).first();
   }
 
-  // Build the TZ <select>
-  function buildTzField() {
-    const wrap = document.createElement('div');
-    wrap.className = 'coral-Form-fieldwrapper';
-    wrap.style.marginTop = '8px';
-
-    const label = document.createElement('label');
-    label.className = 'coral-Form-fieldlabel';
-    label.textContent = 'Timezone';
-
-    const select = document.createElement('select');
-    select.name = 'myproj.tz';
-    select.className = 'coral-Form-field';
-    select.required = true;
-
-    // Good starter list (replace with full IANA list via servlet if you prefer)
-    [
-      'UTC','America/Toronto','America/New_York','America/Chicago','America/Los_Angeles',
-      'Europe/London','Europe/Paris','Europe/Berlin','Asia/Kolkata','Asia/Dubai',
-      'Asia/Singapore','Australia/Sydney','America/Sao_Paulo','Africa/Johannesburg'
-    ].sort().forEach(z => {
-      const o = document.createElement('option'); o.value = o.textContent = z; select.appendChild(o);
+  function waitForWizard(cb) {
+    const $f = findWizardForm();
+    if ($f.length) return cb($f);
+    const obs = new MutationObserver(() => {
+      const $f2 = findWizardForm();
+      if ($f2.length) { obs.disconnect(); cb($f2); }
     });
-
-    const browserTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-    if ([...select.options].some(o => o.value === browserTz)) select.value = browserTz;
-
-    wrap.appendChild(label); wrap.appendChild(select);
-    return { wrap, select };
-  }
-
-  // Get author server timezone (optional servlet; falls back to browser tz)
-  async function getServerZoneId() {
-    try {
-      const resp = await fetch('/bin/myproj/server-timezone', { credentials: 'include' });
-      const json = await resp.json();
-      return json.zoneId || Intl.DateTimeFormat().resolvedOptions().timeZone;
-    } catch (e) {
-      return Intl.DateTimeFormat().resolvedOptions().timeZone;
-    }
+    obs.observe(document.body, { childList: true, subtree: true });
   }
 
   // Convert local wall time in tzFrom -> local wall time in tzTo for the same instant
   function convertLocalToLocal(dateStr, timeStr, tzFrom, tzTo) {
-    const [y,m,d]   = dateStr.split('-').map(Number);
-    const [hh,mm]   = (timeStr || '09:00').split(':').map(Number);
-    const utcGuess  = new Date(Date.UTC(y, (m||1)-1, d||1, hh||0, mm||0));
+    const [y, m, d] = dateStr.split('-').map(Number);
+    const [hh, mm] = (timeStr || '09:00').split(':').map(Number);
+    const guessUTC = new Date(Date.UTC(y, (m || 1) - 1, d || 1, hh || 0, mm || 0));
 
-    const partsIn = (tz) => new Intl.DateTimeFormat('en-CA', {
-      timeZone: tz, year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit', hour12:false
-    }).formatToParts(utcGuess).reduce((a,p)=> (a[p.type]=p.value, a), {});
+    const parts = (tz, dt) => new Intl.DateTimeFormat('en-CA', {
+      timeZone: tz, year:'numeric', month:'2-digit', day:'2-digit',
+      hour:'2-digit', minute:'2-digit', hour12:false
+    }).formatToParts(dt).reduce((a,p)=>(a[p.type]=p.value, a), {});
 
-    const pf = partsIn(tzFrom);
-    const wallFromMs = Date.UTC(+pf.year, +pf.month-1, +pf.day, +pf.hour, +pf.minute);
-    const intendedMs = Date.UTC(y, (m||1)-1, d||1, hh||0, mm||0);
-    const epochMs    = utcGuess.getTime() + (intendedMs - wallFromMs);
+    const fromP = parts(tzFrom, guessUTC);
+    const wallFrom = Date.UTC(+fromP.year, +fromP.month-1, +fromP.day, +fromP.hour, +fromP.minute);
+    const intended = Date.UTC(y, (m||1)-1, d||1, hh||0, mm||0);
+    const epoch = guessUTC.getTime() + (intended - wallFrom);
 
-    const dt         = new Date(epochMs);
-    const pt         = new Intl.DateTimeFormat('en-CA', {
-      timeZone: tzTo, year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit', hour12:false
-    }).formatToParts(dt).reduce((a,p)=> (a[p.type]=p.value, a), {});
-    return { date: `${pt.year}-${pt.month}-${pt.day}`, time: `${pt.hour}:${pt.minute}` };
+    const atInstant = new Date(epoch);
+    const toP = parts(tzTo, atInstant);
+    return { date: `${toP.year}-${toP.month}-${toP.day}`, time: `${toP.hour}:${toP.minute}` };
   }
 
-  onWizardReady(async (form) => {
-    // OOTB fields
-    const whenLater = form.querySelector('coral-radio[name="when"][value="later"], input[name="when"][value="later"]');
-    if (!whenLater) return;
+  function buildTzSelect(zones, defaultTz) {
+    const $sel = $('<select class="coral-Form-field" required></select>');
+    zones.forEach(z => $sel.append($('<option>').val(z).text(z)));
+    if (zones.indexOf(defaultTz) >= 0) $sel.val(defaultTz);
+    return $sel;
+  }
 
-    // Activation date field (AEM shows a Coral datepicker; backing input is below)
-    const dateInput = form.querySelector('coral-datepicker input, input[type="date"], input[type="datetime-local"], input[name*="date"]');
-    if (!dateInput) return;
+  /** ======================
+   *  Main
+   *  ====================== */
+  waitForWizard(function ($form) {
+    console.log("Manage Publication wizard form found ✅");
 
-    // Add a Time input if the wizard doesn't already have one
-    let timeInput = form.querySelector('input[type="time"]');
-    if (!timeInput) {
-      const tw = document.createElement('div');
-      tw.className = 'coral-Form-fieldwrapper';
-      tw.innerHTML = '<label class="coral-Form-fieldlabel">Activation time</label>' +
-                     '<input class="coral-Form-field" type="time" name="myproj.time" required step="300" value="09:00">';
-      (dateInput.closest('.coral-Form-fieldwrapper') || dateInput).after(tw);
-      timeInput = tw.querySelector('input[type="time"]');
+    // Date input from Coral DatePicker
+    const $dateInput = $form.find('coral-datepicker input, input[type="date"], input[name*="date"]').first();
+    const $whenRadios = $form.find('coral-radio[name="when"], input[name="when"]');
+    if (!$dateInput.length || !$whenRadios.length) return;
+
+    // Add Time input (AEM wizard usually lacks one)
+    let $timeInput = $form.find('input[type="time"]').first();
+    if (!$timeInput.length) {
+      const $timeWrap = $(`
+        <div class="coral-Form-fieldwrapper">
+          <label class="coral-Form-fieldlabel">Activation time</label>
+          <input class="coral-Form-field" type="time" step="300" value="09:00"/>
+        </div>`);
+      ($dateInput.closest('.coral-Form-fieldwrapper').length ? $dateInput.closest('.coral-Form-fieldwrapper') : $dateInput)
+        .after($timeWrap);
+      $timeInput = $timeWrap.find('input[type="time"]');
     }
 
-    // Insert the Timezone dropdown right after the time field
-    const { wrap, select: tzSelect } = buildTzField();
-    (timeInput.closest('.coral-Form-fieldwrapper') || timeInput).after(wrap);
+    // Add Timezone dropdown
+    const zones = [
+      'UTC','America/Toronto','America/New_York','America/Chicago','America/Los_Angeles',
+      'Europe/London','Europe/Paris','Europe/Berlin','Asia/Kolkata','Asia/Dubai',
+      'Asia/Singapore','Australia/Sydney','America/Sao_Paulo','Africa/Johannesburg'
+    ].sort();
 
-    const serverTz = await getServerZoneId();
+    const $tzSelect = buildTzSelect(zones, DEFAULT_TZ);
+    const $tzWrap = $(`
+      <div class="coral-Form-fieldwrapper">
+        <label class="coral-Form-fieldlabel">Timezone</label>
+      </div>`).append($tzSelect);
+    $timeInput.closest('.coral-Form-fieldwrapper').after($tzWrap);
 
-    // Convert on submit (only when "Later" is chosen)
-    form.addEventListener('submit', () => {
-      const chosen = form.querySelector('coral-radio[name="when"][checked], input[name="when"]:checked');
-      const when = chosen ? (chosen.value || chosen.getAttribute('value')) : 'now';
-      if (when !== 'later') return;
+    // Determine target "server" timezone without servlet
+    const targetServerTz = (SERVER_TZ && SERVER_TZ.trim().length) ? SERVER_TZ : (
+      USE_BROWSER_TZ_IF_UNSET ? (Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC') : 'UTC'
+    );
 
-      let dateVal = dateInput.value;
-      let timeVal = timeInput.value || '09:00';
+    // Intercept submit even if the form has no action
+    $(document).on('submit', 'form.foundation-form', function () {
+      const $f = $(this);
+      if ($f.get(0) !== $form.get(0)) return; // ensure it's the same wizard
 
-      // If date field is datetime-local ("YYYY-MM-DDTHH:mm"), split it
-      if (dateVal.includes('T')) { const [d,t] = dateVal.split('T'); dateVal = d; if (!timeVal && t) timeVal = t.slice(0,5); }
+      // Only when "Later" is selected
+      const $checked = $f.find('coral-radio[name="when"][checked], input[name="when"]:checked').first();
+      const whenVal = $checked.length ? ($checked.val() || $checked.attr('value')) : 'now';
+      if (whenVal !== 'later') return;
 
-      const tzFrom = tzSelect.value || Intl.DateTimeFormat().resolvedOptions().timeZone;
-      const { date, time } = convertLocalToLocal(dateVal, timeVal, tzFrom, serverTz);
+      const d = $dateInput.val();        // "YYYY-MM-DD"
+      const t = $timeInput.val() || '09:00';
+      if (!d) return;
 
-      // Write back into the actual inputs so AEM schedules correctly in server local time
-      if (dateInput.type === 'datetime-local' || dateInput.value.includes('T')) {
-        dateInput.value = `${date}T${time}`;
-      } else {
-        dateInput.value = date;
-        if (timeInput) timeInput.value = time;
-        const ootbTime = form.querySelector('input[type="time"][name*="time"]');
-        if (ootbTime) ootbTime.value = time;
-      }
-    }, true);
+      const tzFrom = $tzSelect.val();
+      const tzTo   = targetServerTz;
+
+      const { date, time } = convertLocalToLocal(d, t, tzFrom, tzTo);
+
+      // Write back so OOTB scheduler stores server-local wall time
+      $dateInput.val(date);
+      $timeInput.val(time);
+
+      console.log(`TZ adjust: ${d} ${t} ${tzFrom} → ${date} ${time} (${tzTo})`);
+    });
   });
-})(document);
+});
