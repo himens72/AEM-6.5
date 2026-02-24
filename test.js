@@ -28,3 +28,19 @@
     toggle($(this));
   });
 })(Granite.$, Granite);
+var visitorId = localStorage.getItem("pendo_vid");
+
+if (!visitorId) {
+  visitorId = "anon-" + Date.now() + "-" + Math.floor(Math.random() * 100000);
+  localStorage.setItem("pendo_vid", visitorId);
+}
+
+pendo.initialize({
+  visitor: {
+    id: visitorId
+  },
+  account: {
+    id: "public-site"
+  }
+});
+
