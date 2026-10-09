@@ -413,4 +413,24 @@ public class ElasticsearchResponse {
     }
 }
 
+ArrayNode tags = params.putArray("filter_tags_1");
 
+if (items != null) {
+    items.stream()
+        .filter(Objects::nonNull)
+        .map(UniversalFilteringItems::getTagHierarchies)
+        .filter(Objects::nonNull)
+        .flatMap(List::stream)
+        .filter(Objects::nonNull)
+        .flatMap(hierarchy -> Stream.concat(
+            Stream.ofNullable(hierarchy.getParentTag()),
+            hierarchy.getChildTags() == null
+                ? Stream.empty()
+                : hierarchy.getChildTags().stream()
+                    .filter(Objects::nonNull)
+                    .map(ChildTagHierarchy::getChildTag)
+        ))
+        .filter(tag -> !tag.isBlank())
+        .distinct()
+        .forEach(tags::add);
+}
