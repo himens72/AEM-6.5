@@ -418,9 +418,12 @@ ArrayNode tags = params.putArray("filter_tags_1");
 if (items != null) {
     items.stream()
         .filter(Objects::nonNull)
-        .map(UniversalFilteringItems::getTagHierarchies)
-        .filter(Objects::nonNull)
-        .flatMap(List::stream)
+        .flatMap(item -> {
+            List<TagHierarchy> hierarchies = item.getTagHierarchies();
+            return hierarchies == null
+                ? Stream.empty()
+                : hierarchies.stream();
+        })
         .filter(Objects::nonNull)
         .flatMap(hierarchy -> Stream.concat(
             Stream.ofNullable(hierarchy.getParentTag()),
