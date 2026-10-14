@@ -1,7 +1,6 @@
 
 @ExtendWith(MockitoExtension.class)
 class UniversalFilteringImplTest {
-
     @InjectMocks
     private UniversalFilteringImpl model;
 
