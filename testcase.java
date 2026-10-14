@@ -1,70 +1,64 @@
 
-@ExtendWith(MockitoExtension.class)
-class UniversalFilteringImplTest {
-    @InjectMocks
-    private UniversalFilteringImpl model;
+@Test
+void testGetESApiResponse() throws Exception {
 
-    @Mock
-    private HttpClient httpClient;
+    // Read mocked JSON from file
+    String mockJson;
+    try (InputStream is = getClass()
+            .getClassLoader()
+            .getResourceAsStream(
+                "UniversalFilterESApiResponse.json")) {
 
-    @Mock
-    private HttpResponse<String> httpResponse;
+        assertNotNull(is);
+        mockJson = new String(
+            is.readAllBytes(),
+            StandardCharsets.UTF_8
+        );
+    }
 
-    @Test
-    void testGetESApiResponse() throws Exception {
+    HttpClient mockClient = mock(HttpClient.class);
 
-        // Read JSON from resources
-        String mockJson;
+    @SuppressWarnings("unchecked")
+    HttpResponse<String> mockResponse =
+        mock(HttpResponse.class);
 
-        try (InputStream inputStream = getClass()
-                .getClassLoader()
-                .getResourceAsStream(
-                    "UniversalFilterESApiResponse.json")) {
+    when(mockResponse.statusCode()).thenReturn(200);
+    when(mockResponse.body()).thenReturn(mockJson);
 
-            assertNotNull(inputStream);
+    when(mockClient.send(
+        any(HttpRequest.class),
+        ArgumentMatchers
+            .<HttpResponse.BodyHandler<String>>any()
+    )).thenReturn(mockResponse);
 
-            mockJson = new String(
-                inputStream.readAllBytes(),
-                StandardCharsets.UTF_8
-            );
-        }
+    try (MockedStatic<HttpClient> mockedStatic =
+            Mockito.mockStatic(HttpClient.class)) {
 
-        // Your existing endpoint and payload setup
-        // must be completed before calling the method.
+        mockedStatic
+            .when(HttpClient::newHttpClient)
+            .thenReturn(mockClient);
 
-        // Mock response
-        when(httpResponse.statusCode()).thenReturn(200);
-        when(httpResponse.body()).thenReturn(mockJson);
+        // Verify static mocking works
+        assertSame(
+            mockClient,
+            HttpClient.newHttpClient()
+        );
 
-        // Mock HTTP send
-        when(httpClient.send(
-                any(HttpRequest.class),
-                ArgumentMatchers
-                    .<HttpResponse.BodyHandler<String>>any()
-        )).thenReturn(httpResponse);
+        // Call actual method INSIDE static mock
+        UniversalFilteringESApiResponse result =
+            model.getESApiResponse();
 
-        // IMPORTANT: Mock static HttpClient creation
-        try (MockedStatic<HttpClient> mockedClient =
-                Mockito.mockStatic(HttpClient.class)) {
+        assertNotNull(result);
 
-            mockedClient
-                .when(HttpClient::newHttpClient)
-                .thenReturn(httpClient);
+        mockedStatic.verify(
+            HttpClient::newHttpClient,
+            atLeastOnce()
+        );
 
-            // Actual Sling Model method
-            UniversalFilteringESApiResponse result =
-                    model.getESApiResponse();
-
-            assertNotNull(result);
-
-            // Verify HTTP call was mocked
-            verify(httpClient, times(1)).send(
-                any(HttpRequest.class),
-                ArgumentMatchers
-                    .<HttpResponse.BodyHandler<String>>any()
-            );
-
-            verify(httpResponse).body();
-        }
+        verify(mockClient).send(
+            any(HttpRequest.class),
+            ArgumentMatchers
+                .<HttpResponse.BodyHandler<String>>any()
+        );
     }
 }
