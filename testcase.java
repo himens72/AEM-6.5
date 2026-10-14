@@ -14,51 +14,58 @@ class UniversalFilteringImplTest {
     @Test
     void testGetESApiResponse() throws Exception {
 
-        // Read mock JSON from file
+        // Read JSON from resources
         String mockJson;
+
         try (InputStream inputStream = getClass()
                 .getClassLoader()
-                .getResourceAsStream("mock/es-response.json")) {
+                .getResourceAsStream(
+                    "UniversalFilterESApiResponse.json")) {
 
             assertNotNull(inputStream);
+
             mockJson = new String(
                 inputStream.readAllBytes(),
                 StandardCharsets.UTF_8
             );
         }
 
-        // Initialize your model's endpoint and payload
-        // using your existing test setup.
+        // Your existing endpoint and payload setup
+        // must be completed before calling the method.
 
-        // Mock API response
+        // Mock response
         when(httpResponse.statusCode()).thenReturn(200);
         when(httpResponse.body()).thenReturn(mockJson);
 
+        // Mock HTTP send
         when(httpClient.send(
-            any(HttpRequest.class),
-            ArgumentMatchers
-                .<HttpResponse.BodyHandler<String>>any()
+                any(HttpRequest.class),
+                ArgumentMatchers
+                    .<HttpResponse.BodyHandler<String>>any()
         )).thenReturn(httpResponse);
 
-        // Mock HttpClient.newHttpClient()
-        try (MockedStatic<HttpClient> mockedHttpClient =
+        // IMPORTANT: Mock static HttpClient creation
+        try (MockedStatic<HttpClient> mockedClient =
                 Mockito.mockStatic(HttpClient.class)) {
 
-            mockedHttpClient
+            mockedClient
                 .when(HttpClient::newHttpClient)
                 .thenReturn(httpClient);
 
-            // Execute actual method
+            // Actual Sling Model method
             UniversalFilteringESApiResponse result =
-                model.getESApiResponse();
+                    model.getESApiResponse();
 
             assertNotNull(result);
 
+            // Verify HTTP call was mocked
             verify(httpClient, times(1)).send(
                 any(HttpRequest.class),
                 ArgumentMatchers
                     .<HttpResponse.BodyHandler<String>>any()
             );
+
+            verify(httpResponse).body();
         }
     }
 }
