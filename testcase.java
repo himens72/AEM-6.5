@@ -1,64 +1,216 @@
 
-@Test
-void testGetESApiResponse() throws Exception {
+package com.kpmg.core.models.pojo;
 
-    // Read mocked JSON from file
-    String mockJson;
-    try (InputStream is = getClass()
-            .getClassLoader()
-            .getResourceAsStream(
-                "UniversalFilterESApiResponse.json")) {
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.annotation.JsonSetter;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
-        assertNotNull(is);
-        mockJson = new String(
-            is.readAllBytes(),
-            StandardCharsets.UTF_8
-        );
+import java.util.ArrayList;
+import java.util.List;
+
+@JsonIgnoreProperties(ignoreUnknown = true)
+public class UniversalFilteringESApiResponse {
+
+    private static final ObjectMapper MAPPER =
+            new ObjectMapper();
+
+    private int totalResults;
+    private List<UniversalFilterCard> cards = List.of();
+    private List<TagBucket> tagBuckets = List.of();
+
+    // Flatten Elasticsearch hits
+    @JsonSetter("hits")
+    public void setHits(JsonNode hits)
+            throws JsonProcessingException {
+
+        totalResults = hits.path("total")
+                           .path("value")
+                           .asInt(0);
+
+        List<UniversalFilterCard> results =
+                new ArrayList<>();
+
+        JsonNode hitArray = hits.path("hits");
+
+        if (hitArray.isArray()) {
+            for (JsonNode hit : hitArray) {
+                JsonNode source = hit.path("_source");
+
+                if (source.isObject()) {
+                    results.add(MAPPER.treeToValue(
+                            source,
+                            UniversalFilterCard.class
+                    ));
+                }
+            }
+        }
+
+        cards = List.copyOf(results);
     }
 
-    HttpClient mockClient = mock(HttpClient.class);
+    // Flatten Elasticsearch aggregations
+    @JsonSetter("aggregations")
+    public void setAggregations(JsonNode aggregations)
+            throws JsonProcessingException {
 
-    @SuppressWarnings("unchecked")
-    HttpResponse<String> mockResponse =
-        mock(HttpResponse.class);
+        List<TagBucket> buckets = new ArrayList<>();
 
-    when(mockResponse.statusCode()).thenReturn(200);
-    when(mockResponse.body()).thenReturn(mockJson);
+        JsonNode bucketArray = aggregations
+                .path("tags_aggregation")
+                .path("buckets");
 
-    when(mockClient.send(
-        any(HttpRequest.class),
-        ArgumentMatchers
-            .<HttpResponse.BodyHandler<String>>any()
-    )).thenReturn(mockResponse);
+        if (bucketArray.isArray()) {
+            for (JsonNode bucket : bucketArray) {
+                buckets.add(MAPPER.treeToValue(
+                        bucket,
+                        TagBucket.class
+                ));
+            }
+        }
 
-    try (MockedStatic<HttpClient> mockedStatic =
-            Mockito.mockStatic(HttpClient.class)) {
+        tagBuckets = List.copyOf(buckets);
+    }
 
-        mockedStatic
-            .when(HttpClient::newHttpClient)
-            .thenReturn(mockClient);
+    public int getTotalResults() {
+        return totalResults;
+    }
 
-        // Verify static mocking works
-        assertSame(
-            mockClient,
-            HttpClient.newHttpClient()
-        );
+    public List<UniversalFilterCard> getCards() {
+        return cards;
+    }
 
-        // Call actual method INSIDE static mock
-        UniversalFilteringESApiResponse result =
-            model.getESApiResponse();
+    public List<TagBucket> getTagBuckets() {
+        return tagBuckets;
+    }
 
-        assertNotNull(result);
+    // Card data from _source
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class UniversalFilterCard {
 
-        mockedStatic.verify(
-            HttpClient::newHttpClient,
-            atLeastOnce()
-        );
+        @JsonProperty("document_id")
+        private String documentId;
 
-        verify(mockClient).send(
-            any(HttpRequest.class),
-            ArgumentMatchers
-                .<HttpResponse.BodyHandler<String>>any()
-        );
+        @JsonProperty("title")
+        private String title;
+
+        @JsonProperty("description")
+        private String description;
+
+        @JsonProperty("qualified_url")
+        private String outsideUrl;
+
+        @JsonProperty("image_url")
+        private String imageUrl;
+
+        @JsonProperty("image_alt_text")
+        private String imageAltText;
+
+        @JsonProperty("filter_year")
+        private Integer filterYear;
+
+        @JsonProperty("document_type")
+        private String documentType;
+
+        @JsonProperty("article_type")
+        private String articleType;
+
+        @JsonProperty("original_pub_date")
+        private String originalPubDate;
+
+        @JsonProperty("formatted_filter_date")
+        private String formattedFilterDate;
+
+        @JsonProperty("formatted_article_date")
+        private String formattedArticleDate;
+
+        @JsonProperty("formatted_original_pub_date")
+        private String formattedOriginalPubDate;
+
+        @JsonProperty("cqTags")
+        private List<String> cqTags;
+
+        @JsonProperty("cqTagsWithTitle")
+        private List<String> cqTagsWithTitle;
+
+        public String getDocumentId() {
+            return documentId;
+        }
+
+        public String getTitle() {
+            return title;
+        }
+
+        public String getDescription() {
+            return description;
+        }
+
+        public String getOutsideUrl() {
+            return outsideUrl;
+        }
+
+        public String getImageUrl() {
+            return imageUrl;
+        }
+
+        public String getImageAltText() {
+            return imageAltText;
+        }
+
+        public Integer getFilterYear() {
+            return filterYear;
+        }
+
+        public String getDocumentType() {
+            return documentType;
+        }
+
+        public String getArticleType() {
+            return articleType;
+        }
+
+        public String getOriginalPubDate() {
+            return originalPubDate;
+        }
+
+        public String getFormattedFilterDate() {
+            return formattedFilterDate;
+        }
+
+        public String getFormattedArticleDate() {
+            return formattedArticleDate;
+        }
+
+        public String getFormattedOriginalPubDate() {
+            return formattedOriginalPubDate;
+        }
+
+        public List<String> getCqTags() {
+            return cqTags;
+        }
+
+        public List<String> getCqTagsWithTitle() {
+            return cqTagsWithTitle;
+        }
+    }
+
+    // Aggregation filter
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class TagBucket {
+
+        private String key;
+
+        @JsonProperty("doc_count")
+        private int docCount;
+
+        public String getKey() {
+            return key;
+        }
+
+        public int getDocCount() {
+            return docCount;
+        }
     }
 }
